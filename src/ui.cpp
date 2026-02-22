@@ -69,6 +69,7 @@ static int current_rc_channels_data [UI_CHANNEL_COUNT] = {0};
 static int current_rssi = -1;
 static int current_lq = -1;
 static int current_pw = -1;
+static int current_link_rate = -1;
 
 #if defined(BOARD_M5STICKS3)
 static const int STICKS3_RSSI_TEXT_X = 4;
@@ -87,8 +88,17 @@ static const int STICKS3_CELL_H = 44;
 static const int STICKS3_CH_TEXT_H = 22;
 static const int STICKS3_CH_BAR_H = 12;
 static const uint8_t STICKS3_CHANNELS_PER_PAGE = 6;
-static uint8_t sticks3_channel_page = 0;
+static uint8_t sticks3_page_index = 0;
 static bool sticks3_force_channel_redraw = true;
+static bool sticks3_force_stats_redraw = true;
+static const int STICKS3_STATS_TX_X = 4;
+static const int STICKS3_STATS_TX_Y = 46;
+static const int STICKS3_STATS_RATE_X = 124;
+static const int STICKS3_STATS_RATE_Y = 46;
+static const int STICKS3_STATS_FRAME_X = 4;
+static const int STICKS3_STATS_FRAME_Y = 72;
+static const int STICKS3_STATS_FRAME_W = 232;
+static const int STICKS3_STATS_FRAME_H = 60;
 #endif
 
 
@@ -108,6 +118,27 @@ static void drawProgressBar(UISprite & s, uint16_t color, int val, int v_min, in
 	s.drawRect(0, 0, s.width()-1, s.height()-1, color); // draw outline
 	s.fillRect(0, 0, map(val, v_min, v_max, 0, s.width()-1), s.height()-1, color);
 }
+
+static void beepCh4Alert() {
+#if defined(BOARD_M5STICKS3)
+	M5.Speaker.tone(2000, 500);
+#endif
+}
+
+#if defined(BOARD_M5STICKS3)
+static uint8_t sticks3ChannelPages() {
+	uint8_t pages = (UI_CHANNEL_COUNT + STICKS3_CHANNELS_PER_PAGE - 1) / STICKS3_CHANNELS_PER_PAGE;
+	return (pages == 0) ? 1 : pages;
+}
+
+static bool sticks3IsStatsPage() {
+	return sticks3_page_index >= sticks3ChannelPages();
+}
+
+static void sticks3ClearContentArea() {
+	lcd.fillRect(STICKS3_GRID_X, STICKS3_GRID_Y, lcd.width() - STICKS3_GRID_X * 2, lcd.height() - STICKS3_GRID_Y, TFT_BLACK);
+}
+#endif
 
 void UI_setup() {
 	#if defined(TFT_MISO) && defined(TFT_MOSI) && defined(TFT_SCLK) && defined(TFT_CS) && defined(TFT_DC) && defined(TFT_RST)
@@ -129,11 +160,16 @@ void UI_setup() {
 		createElement(rssi_bar, 2, 112, 14, TFT_CYAN);
 		createElement(lq_text, 2, 112, 16, TFT_GREENYELLOW);
 		createElement(lq_bar, 2, 112, 14, TFT_GREENYELLOW);
+		createElement(tx_pwr_text, 2, 112, 18, TFT_DARKGREY);
+		createElement(link_rate_text, 2, 112, 18, TFT_DARKGREY);
+		createElement(rx_frame_indicator_bar, 1, STICKS3_STATS_FRAME_W, STICKS3_STATS_FRAME_H, TFT_ORANGE);
+		rx_frame_indicator_bar.setScrollRect(0, 0, rx_frame_indicator_bar.width(), rx_frame_indicator_bar.height(), TFT_BLACK);
 		uint8_t displayed_channels = (UI_CHANNEL_COUNT < STICKS3_CHANNELS_PER_PAGE) ? UI_CHANNEL_COUNT : STICKS3_CHANNELS_PER_PAGE;
 		for (uint8_t i=0; i < displayed_channels; i++) {
 			createElement(*channel_texts[i], 2, STICKS3_CELL_W - 2, STICKS3_CH_TEXT_H, TFT_WHITE);
 			createElement(*channel_bars[i], 1, STICKS3_CELL_W - 2, STICKS3_CH_BAR_H, TFT_LIGHTGREY);
 		}
+		rx_frame_indicator_bar.print("FRAME WAIT");
 	#else
 		createElement(rssi_text, 2, 100, 20, TFT_CYAN);
 		createElement(rssi_bar, 2, 200, 20, TFT_CYAN);
@@ -200,8 +236,16 @@ void UI_setRssi(int dbm) {
 
 void UI_setTxPwr(int value) {
 #if defined(BOARD_M5STICKS3)
-	(void) value;
-	return;
+	if (!sticks3IsStatsPage()) {
+		current_pw = value;
+		return;
+	}
+	if (value != current_pw || sticks3_force_stats_redraw) {
+		current_pw = value;
+		clearSprite(tx_pwr_text);
+		tx_pwr_text.printf("PW %d", value);
+		tx_pwr_text.pushSprite(STICKS3_STATS_TX_X, STICKS3_STATS_TX_Y);
+	}
 #else
 	if (value != current_pw) {
 		current_pw = value;
@@ -214,8 +258,16 @@ void UI_setTxPwr(int value) {
 
 void UI_setLinkRate(int hz) {
 #if defined(BOARD_M5STICKS3)
-	(void) hz;
-	return;
+	if (!sticks3IsStatsPage()) {
+		current_link_rate = hz;
+		return;
+	}
+	if (hz != current_link_rate || sticks3_force_stats_redraw) {
+		current_link_rate = hz;
+		clearSprite(link_rate_text);
+		link_rate_text.printf("PR %d", hz);
+		link_rate_text.pushSprite(STICKS3_STATS_RATE_X, STICKS3_STATS_RATE_Y);
+	}
 #else
 	clearSprite(link_rate_text);
 	link_rate_text.printf("PR %d", hz);
@@ -230,8 +282,14 @@ void UI_setRssiScale(int dbm_min, int dbm_max) {
 
 void UI_setChannels(uint32_t * channel_data) {
 	#if defined(BOARD_M5STICKS3)
+		if (sticks3IsStatsPage()) {
+			for (uint8_t i=0; i < UI_CHANNEL_COUNT; i++) {
+				current_rc_channels_data[i] = channel_data[i];
+			}
+			return;
+		}
 		uint8_t displayed_channels = (UI_CHANNEL_COUNT < STICKS3_CHANNELS_PER_PAGE) ? UI_CHANNEL_COUNT : STICKS3_CHANNELS_PER_PAGE;
-		uint8_t page_start = sticks3_channel_page * STICKS3_CHANNELS_PER_PAGE;
+		uint8_t page_start = sticks3_page_index * STICKS3_CHANNELS_PER_PAGE;
 		for (uint8_t slot = 0; slot < displayed_channels; slot++) {
 			uint8_t channel_idx = page_start + slot;
 			UISprite& text = *channel_texts[slot];
@@ -257,11 +315,18 @@ void UI_setChannels(uint32_t * channel_data) {
 			}
 
 			current_rc_channels_data[channel_idx] = value;
+			bool ch4_alert = (channel_idx == 4 && value > 1500);
+			uint16_t channel_text_color = ch4_alert ? TFT_RED : TFT_WHITE;
+			uint16_t channel_bar_color = ch4_alert ? TFT_RED : TFT_LIGHTGREY;
+			if (ch4_alert) {
+				beepCh4Alert();
+			}
 			clearSprite(text);
+			text.setTextColor(channel_text_color);
 			text.printf("%d:%4d", channel_idx + 1, value);
 			text.pushSprite(cell_x, cell_y);
 			clearSprite(bar);
-			drawProgressBar(bar, TFT_LIGHTGREY, value, 172, 1810);
+			drawProgressBar(bar, channel_bar_color, value, 172, 1810);
 			bar.pushSprite(cell_x, cell_y + STICKS3_CH_TEXT_H);
 		}
 		sticks3_force_channel_redraw = false;
@@ -287,18 +352,57 @@ void UI_setChannels(uint32_t * channel_data) {
 
 void UI_nextChannelPage() {
 #if defined(BOARD_M5STICKS3)
-	if (UI_CHANNEL_COUNT > STICKS3_CHANNELS_PER_PAGE) {
-		uint8_t pages = (UI_CHANNEL_COUNT + STICKS3_CHANNELS_PER_PAGE - 1) / STICKS3_CHANNELS_PER_PAGE;
-		sticks3_channel_page = (sticks3_channel_page + 1) % pages;
-		sticks3_force_channel_redraw = true;
+	uint8_t total_pages = sticks3ChannelPages() + 1; // +1 stats page
+	sticks3_page_index = (sticks3_page_index + 1) % total_pages;
+	sticks3_force_channel_redraw = true;
+	sticks3_force_stats_redraw = true;
+	sticks3ClearContentArea();
+	if (sticks3IsStatsPage()) {
+		UI_setTxPwr(current_pw);
+		UI_setLinkRate(current_link_rate);
+		rx_frame_indicator_bar.pushSprite(STICKS3_STATS_FRAME_X, STICKS3_STATS_FRAME_Y);
+		sticks3_force_stats_redraw = false;
+	}
+	else {
+		uint32_t channel_data [UI_CHANNEL_COUNT];
+		for (uint8_t i=0; i < UI_CHANNEL_COUNT; i++) {
+			channel_data[i] = current_rc_channels_data[i];
+		}
+		UI_setChannels(channel_data);
 	}
 #endif
 }
 
 void UI_pushDataFrameIndication(uint8_t * results, int count) {
 #if defined(BOARD_M5STICKS3)
-	(void) results;
-	(void) count;
+	for (int i=0; i < count; i++) {
+		rx_frame_indicator_bar.scroll(1, 0);
+		uint16_t color = TFT_DARKGREY;
+		switch ((crsf_packet_result_e) results[i]) {
+			case CRSF_RESULT_PACKET_OK:
+				color = TFT_GREEN;
+				break;
+			case CRSF_RESULT_PACKET_TIMEOUT:
+				color = TFT_RED;
+				break;
+			default:
+				color = TFT_DARKGREY;
+		}
+		rx_frame_indicator_bar.drawFastVLine(1, 0, rx_frame_indicator_bar.height(), color);
+		if ((packet_counter + i) % 25 == 0) {
+			rx_frame_indicator_bar.drawFastVLine(1, rx_frame_indicator_bar.height() - 5, rx_frame_indicator_bar.height(), TFT_WHITE);
+		}
+	}
+	rx_frame_indicator_bar.drawRect(0, 0, rx_frame_indicator_bar.width(), rx_frame_indicator_bar.height(), TFT_DARKCYAN);
+	packet_counter += count;
+	if (sticks3IsStatsPage()) {
+		if (sticks3_force_stats_redraw) {
+			UI_setTxPwr(current_pw);
+			UI_setLinkRate(current_link_rate);
+			sticks3_force_stats_redraw = false;
+		}
+		rx_frame_indicator_bar.pushSprite(STICKS3_STATS_FRAME_X, STICKS3_STATS_FRAME_Y);
+	}
 	return;
 #else
 	for (int i=0; i < count; i++) {
