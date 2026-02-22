@@ -5,6 +5,10 @@
 	#include <M5Core2.h> 
 #endif
 
+#ifdef BOARD_M5STICKS3
+	#include <M5Unified.h>
+#endif
+
 #include <WiFi.h>
 // #include "mqtt_client.h"
 
@@ -27,8 +31,12 @@ void reportPacketResult(uint8_t result) {
 }
 
 void setup() {
-	#ifdef BOARD_M5CORE2
+	#if defined(BOARD_M5CORE2) 
 		M5.begin(true, false, false);
+	#elif defined(BOARD_M5STICKS3)
+		auto cfg = M5.config();
+		M5.begin(cfg);
+		M5.Power.setExtOutput(true); // EXT_5V OUTPUT ON
 	#endif
 	UI_setup();
 	Serial.begin(115200);
@@ -78,7 +86,7 @@ void setup() {
 			if (channel_data_ptr != nullptr) {
 				crsf_channels_t * c = channel_data_ptr;
 				uint32_t channel_data [] = {c->ch0, c->ch1, c->ch2, c->ch3, c->ch4, c->ch5, c->ch6, c->ch7, c->ch8, c->ch9};
-				UI_setChannels10(channel_data);
+				UI_setChannels(channel_data);
 				channel_data_ptr = nullptr;
 			}
 			if (queued_packet_results > 0) {
