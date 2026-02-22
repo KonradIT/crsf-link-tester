@@ -1,12 +1,10 @@
 #include "crsf_rx.h"
 
-#ifdef BOARD_M5CORE2
-	#include <M5Core2.h> 
-	#define PIN_RX G13
-	#define PIN_TX G14
-#else
-	#include <Arduino.h>
-#endif // BOARD_M5CORE2
+#include <Arduino.h>
+
+#if !defined(PIN_RX) || !defined(PIN_TX)
+	#error "PIN_RX and PIN_TX must be defined in build flags (platformio.ini)"
+#endif
 
 static const uint8_t LINKSTAT_FRAME_START_SEQ [] = {CRSF_ADDRESS_FLIGHT_CONTROLLER, 10+2, CRSF_FRAMETYPE_LINK_STATISTICS}; // 0xC8, 0x0C, 0x14
 static const uint8_t CHANNEL_DATA_FRAME_START_SEQ [] = {CRSF_ADDRESS_FLIGHT_CONTROLLER, 22+2, CRSF_FRAMETYPE_RC_CHANNELS_PACKED};
