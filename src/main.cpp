@@ -73,6 +73,12 @@ void setup() {
 	xTaskCreatePinnedToCore([](void * parameters) {
 		uint8_t packet_results [20];
 		for(;;) {
+			#if defined(BOARD_M5STICKS3)
+				M5.update();
+				if (M5.BtnA.wasPressed()) {
+					UI_nextChannelPage();
+				}
+			#endif
 			int queued_packet_results = uxQueueMessagesWaiting(data_packet_results_queue_handle);
 			if (link_stat_ptr != nullptr) { 
 				crsf_payload_link_statistics_t * sig = link_stat_ptr;

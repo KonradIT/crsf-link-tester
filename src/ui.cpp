@@ -18,8 +18,6 @@ using UISprite = LGFX_Sprite;
 using UISprite = TFT_eSprite;
 #endif
 
-#define NUM_CHANNELS 6
-
 static UISprite rssi_text(&lcd);
 static UISprite rssi_bar(&lcd);
 static UISprite lq_text(&lcd);
@@ -60,11 +58,14 @@ static UISprite * channel_bars [] = {
 	&ch1_bar, &ch2_bar, &ch3_bar, &ch4_bar, &ch5_bar, &ch6_bar, &ch7_bar, &ch8_bar, &ch9_bar, &ch10_bar
 };
 
+static const uint8_t UI_MAX_CHANNEL_SPRITES = sizeof(channel_texts) / sizeof(channel_texts[0]);
+static const uint8_t UI_CHANNEL_COUNT = (NUM_CHANNELS <= UI_MAX_CHANNEL_SPRITES) ? NUM_CHANNELS : UI_MAX_CHANNEL_SPRITES;
+
 static int rssi_scale_min = 120;
 static int rssi_scale_max = 50;
 
 // remember last values to prevent unnecessary sprite updates
-static int current_rc_channels_data [10] = {0};
+static int current_rc_channels_data [UI_CHANNEL_COUNT] = {0};
 static int current_rssi = -1;
 static int current_lq = -1;
 static int current_pw = -1;
@@ -85,6 +86,9 @@ static const int STICKS3_CELL_W = 78;
 static const int STICKS3_CELL_H = 44;
 static const int STICKS3_CH_TEXT_H = 22;
 static const int STICKS3_CH_BAR_H = 12;
+static const uint8_t STICKS3_CHANNELS_PER_PAGE = 6;
+static uint8_t sticks3_channel_page = 0;
+static bool sticks3_force_channel_redraw = true;
 #endif
 
 
@@ -125,7 +129,8 @@ void UI_setup() {
 		createElement(rssi_bar, 2, 112, 14, TFT_CYAN);
 		createElement(lq_text, 2, 112, 16, TFT_GREENYELLOW);
 		createElement(lq_bar, 2, 112, 14, TFT_GREENYELLOW);
-		for (uint8_t i=0; i < NUM_CHANNELS; i++) {
+		uint8_t displayed_channels = (UI_CHANNEL_COUNT < STICKS3_CHANNELS_PER_PAGE) ? UI_CHANNEL_COUNT : STICKS3_CHANNELS_PER_PAGE;
+		for (uint8_t i=0; i < displayed_channels; i++) {
 			createElement(*channel_texts[i], 2, STICKS3_CELL_W - 2, STICKS3_CH_TEXT_H, TFT_WHITE);
 			createElement(*channel_bars[i], 1, STICKS3_CELL_W - 2, STICKS3_CH_BAR_H, TFT_LIGHTGREY);
 		}
@@ -224,39 +229,70 @@ void UI_setRssiScale(int dbm_min, int dbm_max) {
 }
 
 void UI_setChannels(uint32_t * channel_data) {
-	for (uint8_t i=0; i < NUM_CHANNELS; i++) {
-		int value =  channel_data[i];
-		// update graphics only if the current channel value is different from previous
-		if (value != current_rc_channels_data[i]) {
-			current_rc_channels_data[i] = value;
-			UISprite& text = *channel_texts[i];
-			UISprite& bar = *channel_bars[i];
-			#if defined(BOARD_M5STICKS3)
-				int col = i % STICKS3_GRID_COLS;
-				int row = i / STICKS3_GRID_COLS;
-				int cell_x = STICKS3_GRID_X + col * STICKS3_CELL_W;
-				int cell_y = STICKS3_GRID_Y + row * STICKS3_CELL_H;
-			#endif
-			clearSprite(text);
-			#if defined(BOARD_M5STICKS3)
-				text.printf("%d:%4d", i + 1, value);
-				text.pushSprite(cell_x, cell_y);
-			#else
-				int v_offset = 140 + 10 * i;
-				text.printf("CH%2d: %4d", i+1, value);
-				text.pushSprite(10, v_offset);
-			#endif
+	#if defined(BOARD_M5STICKS3)
+		uint8_t displayed_channels = (UI_CHANNEL_COUNT < STICKS3_CHANNELS_PER_PAGE) ? UI_CHANNEL_COUNT : STICKS3_CHANNELS_PER_PAGE;
+		uint8_t page_start = sticks3_channel_page * STICKS3_CHANNELS_PER_PAGE;
+		for (uint8_t slot = 0; slot < displayed_channels; slot++) {
+			uint8_t channel_idx = page_start + slot;
+			UISprite& text = *channel_texts[slot];
+			UISprite& bar = *channel_bars[slot];
+			int col = slot % STICKS3_GRID_COLS;
+			int row = slot / STICKS3_GRID_COLS;
+			int cell_x = STICKS3_GRID_X + col * STICKS3_CELL_W;
+			int cell_y = STICKS3_GRID_Y + row * STICKS3_CELL_H;
 
+			if (channel_idx >= UI_CHANNEL_COUNT) {
+				if (sticks3_force_channel_redraw) {
+					clearSprite(text);
+					text.pushSprite(cell_x, cell_y);
+					clearSprite(bar);
+					bar.pushSprite(cell_x, cell_y + STICKS3_CH_TEXT_H);
+				}
+				continue;
+			}
+
+			int value = channel_data[channel_idx];
+			if (!sticks3_force_channel_redraw && value == current_rc_channels_data[channel_idx]) {
+				continue;
+			}
+
+			current_rc_channels_data[channel_idx] = value;
+			clearSprite(text);
+			text.printf("%d:%4d", channel_idx + 1, value);
+			text.pushSprite(cell_x, cell_y);
 			clearSprite(bar);
 			drawProgressBar(bar, TFT_LIGHTGREY, value, 172, 1810);
-			#if defined(BOARD_M5STICKS3)
-				bar.pushSprite(cell_x, cell_y + STICKS3_CH_TEXT_H);
-			#else
-				int v_offset = 140 + 10 * i;
-				bar.pushSprite(110, v_offset);
-			#endif
+			bar.pushSprite(cell_x, cell_y + STICKS3_CH_TEXT_H);
 		}
+		sticks3_force_channel_redraw = false;
+	#else
+		for (uint8_t i=0; i < UI_CHANNEL_COUNT; i++) {
+			int value = channel_data[i];
+			// update graphics only if the current channel value is different from previous
+			if (value != current_rc_channels_data[i]) {
+				current_rc_channels_data[i] = value;
+				UISprite& text = *channel_texts[i];
+				UISprite& bar = *channel_bars[i];
+				int v_offset = 140 + 10 * i;
+				clearSprite(text);
+				text.printf("CH%2d: %4d", i+1, value);
+				text.pushSprite(10, v_offset);
+				clearSprite(bar);
+				drawProgressBar(bar, TFT_LIGHTGREY, value, 172, 1810);
+				bar.pushSprite(110, v_offset);
+			}
+		}
+	#endif
+}
+
+void UI_nextChannelPage() {
+#if defined(BOARD_M5STICKS3)
+	if (UI_CHANNEL_COUNT > STICKS3_CHANNELS_PER_PAGE) {
+		uint8_t pages = (UI_CHANNEL_COUNT + STICKS3_CHANNELS_PER_PAGE - 1) / STICKS3_CHANNELS_PER_PAGE;
+		sticks3_channel_page = (sticks3_channel_page + 1) % pages;
+		sticks3_force_channel_redraw = true;
 	}
+#endif
 }
 
 void UI_pushDataFrameIndication(uint8_t * results, int count) {
