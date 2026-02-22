@@ -109,7 +109,7 @@ struct __attribute__ ((packed)) crsf_channels_t {
     unsigned ch1 : 11;
     unsigned ch2 : 11;
     unsigned ch3 : 11;
-    unsigned ch4 : 11;
+    unsigned ch4 : 11; // arm/disarm on ExpressLRS below 4.0, above use arm_status
     unsigned ch5 : 11;
     unsigned ch6 : 11;
     unsigned ch7 : 11;
@@ -121,4 +121,5 @@ struct __attribute__ ((packed)) crsf_channels_t {
     unsigned ch13 : 11;
     unsigned ch14 : 11;
     unsigned ch15 : 11;
+    uint8_t armStatus; // optional ExpressLRS 4.0.
 };
