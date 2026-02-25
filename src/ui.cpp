@@ -12,6 +12,11 @@
 	#define lcd _lcd
 #endif
 
+// for boards using 135x240 screen (ST7789 driver).
+#if defined(BOARD_M5STICKS3) || defined(BOARD_TTGO_T_DISPLAY)
+	#define SMALL_SCREEN_BOARD
+#endif
+
 #if defined(BOARD_M5CORE2) || defined(BOARD_M5STICKS3)
 using UISprite = LGFX_Sprite;
 #else
@@ -71,7 +76,7 @@ static int current_lq = -1;
 static int current_pw = -1;
 static int current_link_rate = -1;
 
-#if defined(BOARD_M5STICKS3)
+#if defined(SMALL_SCREEN_BOARD)
 static const int STICKS3_RSSI_TEXT_X = 4;
 static const int STICKS3_RSSI_TEXT_Y = 4;
 static const int STICKS3_RSSI_BAR_X = 4;
@@ -125,7 +130,7 @@ static void beepCh4Alert() {
 #endif
 }
 
-#if defined(BOARD_M5STICKS3)
+#if defined(SMALL_SCREEN_BOARD)
 static uint8_t sticks3ChannelPages() {
 	uint8_t pages = (UI_CHANNEL_COUNT + STICKS3_CHANNELS_PER_PAGE - 1) / STICKS3_CHANNELS_PER_PAGE;
 	return (pages == 0) ? 1 : pages;
@@ -153,7 +158,7 @@ void UI_setup() {
 		#endif
 	#endif // BOARD_M5CORE2
 
-	#if defined(BOARD_M5STICKS3)
+	#if defined(SMALL_SCREEN_BOARD)
 		lcd.setRotation(1); // 240x135 (landscape) on StickS3
 		lcd.fillScreen(TFT_BLACK);
 		createElement(rssi_text, 2, 112, 16, TFT_CYAN);
@@ -198,13 +203,13 @@ void UI_setLq(int percent) {
 		current_lq = percent;
 		clearSprite(lq_text);
 		lq_text.printf("LQ %d", percent);
-		#if defined(BOARD_M5STICKS3)
+		#if defined(SMALL_SCREEN_BOARD)
 			lq_text.pushSprite(STICKS3_LQ_TEXT_X, STICKS3_LQ_TEXT_Y);
 		#else
 			lq_text.pushSprite(10, 40);
 		#endif
 		drawProgressBar(lq_bar, TFT_GREENYELLOW, percent, 0, 100);
-		#if defined(BOARD_M5STICKS3)
+		#if defined(SMALL_SCREEN_BOARD)
 			lq_bar.pushSprite(STICKS3_LQ_BAR_X, STICKS3_LQ_BAR_Y);
 		#else
 			lq_bar.pushSprite(110, 40);
@@ -224,7 +229,7 @@ void UI_setRssi(int dbm) {
 			rssi_text.printf("RX WAIT");
 			drawProgressBar(rssi_bar, TFT_RED, 0, 0, 1);
 		}
-		#if defined(BOARD_M5STICKS3)
+		#if defined(SMALL_SCREEN_BOARD)
 			rssi_text.pushSprite(STICKS3_RSSI_TEXT_X, STICKS3_RSSI_TEXT_Y);
 			rssi_bar.pushSprite(STICKS3_RSSI_BAR_X, STICKS3_RSSI_BAR_Y);
 		#else
@@ -235,7 +240,7 @@ void UI_setRssi(int dbm) {
 }
 
 void UI_setTxPwr(int value) {
-#if defined(BOARD_M5STICKS3)
+#if defined(SMALL_SCREEN_BOARD)
 	if (!sticks3IsStatsPage()) {
 		current_pw = value;
 		return;
@@ -257,7 +262,7 @@ void UI_setTxPwr(int value) {
 }
 
 void UI_setLinkRate(int hz) {
-#if defined(BOARD_M5STICKS3)
+#if defined(SMALL_SCREEN_BOARD)
 	if (!sticks3IsStatsPage()) {
 		current_link_rate = hz;
 		return;
@@ -281,7 +286,7 @@ void UI_setRssiScale(int dbm_min, int dbm_max) {
 }
 
 void UI_setChannels(uint32_t * channel_data) {
-	#if defined(BOARD_M5STICKS3)
+	#if defined(SMALL_SCREEN_BOARD)
 		if (sticks3IsStatsPage()) {
 			for (uint8_t i=0; i < UI_CHANNEL_COUNT; i++) {
 				current_rc_channels_data[i] = channel_data[i];
@@ -351,7 +356,7 @@ void UI_setChannels(uint32_t * channel_data) {
 }
 
 void UI_nextChannelPage() {
-#if defined(BOARD_M5STICKS3)
+#if defined(SMALL_SCREEN_BOARD)
 	uint8_t total_pages = sticks3ChannelPages() + 1; // +1 stats page
 	sticks3_page_index = (sticks3_page_index + 1) % total_pages;
 	sticks3_force_channel_redraw = true;
@@ -374,7 +379,7 @@ void UI_nextChannelPage() {
 }
 
 void UI_pushDataFrameIndication(uint8_t * results, int count) {
-#if defined(BOARD_M5STICKS3)
+#if defined(SMALL_SCREEN_BOARD)
 	for (int i=0; i < count; i++) {
 		rx_frame_indicator_bar.scroll(1, 0);
 		uint16_t color = TFT_DARKGREY;

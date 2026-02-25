@@ -9,6 +9,10 @@
 	#include <M5Unified.h>
 #endif
 
+#ifdef BOARD_TTGO_T_DISPLAY
+	#include <Button2.h>
+#endif
+
 #include <WiFi.h>
 // #include "mqtt_client.h"
 
@@ -25,6 +29,11 @@ static int current_rf_mode = 0;
 static StaticQueue_t data_packet_results_queue;
 static QueueHandle_t data_packet_results_queue_handle;
 static uint8_t data_packet_results_queue_storage [20 * 1];
+
+#ifdef BOARD_TTGO_T_DISPLAY
+static Button2 ttgo_page_button(35);
+static bool ttgo_page_button_prev_pressed = false;
+#endif
 
 void reportPacketResult(uint8_t result) {
 	xQueueSendToBack(data_packet_results_queue_handle, &result, 1);
@@ -78,6 +87,13 @@ void setup() {
 				if (M5.BtnA.wasPressed()) {
 					UI_nextChannelPage();
 				}
+			#elif defined(BOARD_TTGO_T_DISPLAY)
+				ttgo_page_button.loop();
+				bool ttgo_page_button_now_pressed = ttgo_page_button.isPressed();
+				if (ttgo_page_button_now_pressed && !ttgo_page_button_prev_pressed) {
+					UI_nextChannelPage();
+				}
+				ttgo_page_button_prev_pressed = ttgo_page_button_now_pressed;
 			#endif
 			int queued_packet_results = uxQueueMessagesWaiting(data_packet_results_queue_handle);
 			if (link_stat_ptr != nullptr) { 
