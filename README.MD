@@ -22,6 +22,7 @@ Based on ESP32 microcontroller, multiple boards and displays are supported.
 - M5Core2
 - ESP32 2432-S028 HMI Module
 - M5Stack Sticks3
+- TTGO T-Display
 
 #### Supported displays
 
@@ -62,7 +63,7 @@ Basically the process is the same as for ExpressLRS and VSCode, just modify the 
 
 ![M5Core2 diagram](https://i.ibb.co/9p8ZG4k/crsf-tester-m5-wiring.jpg)
 
-#### Wiring diagram for M5Stack Sticks3
+#### Wiring for M5Stack Sticks3:
 
 Uses Grove hat2 connector.
 
@@ -76,3 +77,7 @@ ROW 2:
 - G6 -> TX
 - G7 -> RX but unused
 
+
+#### Wiring for TTGO T-Display:
+
+PIN 32 for RX
