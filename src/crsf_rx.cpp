@@ -133,6 +133,14 @@ IRAM_ATTR void CRSF_RX_loop() {
 			if (processFrame()) {
 				crsf_frame_buffer_pos -= full_frame_length; // subtract frame size from write pointer
 				memcpy(crsf_frame_buffer, &crsf_frame_buffer[full_frame_length], crsf_frame_buffer_pos); // put the remaining bytes into beginning
+
+					// Output the received frame to serial if enabled
+					#if defined(SERIAL_OUTPUT_ENABLED)
+						for (int i = 0; i < full_frame_length; i++) {
+							Serial.printf("%02X ", crsf_frame_buffer[i]);
+						}
+						Serial.println();
+					#endif
 			}
 			else {
 				Serial.printf("Frame error: wrong CRC\n");
