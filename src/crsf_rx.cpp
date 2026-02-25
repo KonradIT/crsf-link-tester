@@ -9,7 +9,14 @@
 static const uint8_t LINKSTAT_FRAME_START_SEQ [] = {CRSF_ADDRESS_FLIGHT_CONTROLLER, 10+2, CRSF_FRAMETYPE_LINK_STATISTICS}; // 0xC8, 0x0C, 0x14
 static const uint8_t CHANNEL_DATA_FRAME_START_SEQ [] = {CRSF_ADDRESS_FLIGHT_CONTROLLER, 22+2, CRSF_FRAMETYPE_RC_CHANNELS_PACKED};
 
-static const int tx_power_to_milliwats [] = {0, 10, 25, 100, -1, -1 -1, 250};
+// See: https://github.com/ExpressLRS/ExpressLRS/blob/1c4d376318997efc8f460c21ab233f63d2f79f6c/src/lib/CrsfProtocol/crsf_protocol.h#L373
+// Some ELRS setups may also report index 7 for 250mW.
+static const int tx_power_to_milliwats [] = {0, 10, 25, 100, 500, 1000, 2000, 250};
+
+// TODO: add 2400 MHz variants
+
+// For ELRS it depends on the Semtech chip used and the frequency band.
+// See: https://github.com/ExpressLRS/ExpressLRS/blob/9fa060f21a4e0f045e519432a951b556cd1b8fc0/src/lib/tx-crsf/TXModuleParameters.cpp#L22
 static const int rfmd_to_link_rate_elrs [] = {4, 25, 50, 100, 150, 200, 250, 500};
 static const int rfmd_to_link_rate_tbs [] = {4, 50, 150};
 static const int rfmd_dbm_sensitivity [] = {125, 123, 120, 117, 112, 112, 108, 105}; // expresslrs
@@ -136,7 +143,8 @@ IRAM_ATTR void CRSF_RX_loop() {
 }
 
 int CRSF_txPowerToMilliwatts(uint8_t n) {
-	if (n < sizeof(tx_power_to_milliwats))
+	const uint8_t count = sizeof(tx_power_to_milliwats) / sizeof(tx_power_to_milliwats[0]);
+	if (n < count)
 		return tx_power_to_milliwats[n];
 	return -1 * n;
 }
