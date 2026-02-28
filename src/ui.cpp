@@ -158,6 +158,9 @@ void UI_setup() {
 		#endif
 	#endif // BOARD_M5CORE2
 
+	#ifdef BOARD_CYD2USB
+		lcd.invertDisplay(1);
+	#endif
 	#if defined(SMALL_SCREEN_BOARD)
 		lcd.setRotation(1); // 240x135 (landscape) on StickS3
 		lcd.fillScreen(TFT_BLACK);

@@ -1,4 +1,3 @@
-
 #include <Arduino.h>
 
 #ifdef BOARD_M5CORE2
@@ -142,4 +141,3 @@ void setup() {
 void loop() {
 	
 }
-
