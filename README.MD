@@ -1,4 +1,3 @@
-
 ## CRSF Link tester and packet monitor
 
 ### A testing tool for Crossfire and ExpressLRS receivers.
@@ -23,6 +22,7 @@ Based on ESP32 microcontroller, multiple boards and displays are supported.
 - ESP32 2432-S028 HMI Module
 - M5Stack Sticks3
 - TTGO T-Display
+- cyd2usb
 
 #### Supported displays
 
