@@ -53,10 +53,12 @@ void setup() {
 	#else
 		CRSF_RX_begin(CRSF_RX_VARIANT_ELRS);
 	#endif 
-	CRSF_RX_onReceiveLinkStatistics([](crsf_payload_link_statistics_t * stats) { 
+	CRSF_RX_onReceiveLinkStatistics([](crsf_payload_link_statistics_t * stats) {
 		link_stat_ptr = stats;
-		Serial.printf("RSSI: %d, LQ: %d, RFMODE: %d, TXPWR: %d\n", 
-			stats->uplink_RSSI_1, stats->uplink_Link_quality, stats->rf_Mode, CRSF_txPowerToMilliwatts(stats->uplink_TX_Power));
+		#if !defined(SERIAL_OUTPUT_ENABLED)
+			Serial.printf("RSSI: %d, LQ: %d, RFMODE: %d, TXPWR: %d\n",
+				stats->uplink_RSSI_1, stats->uplink_Link_quality, stats->rf_Mode, CRSF_txPowerToMilliwatts(stats->uplink_TX_Power));
+		#endif
 		if (current_rf_mode != stats->rf_Mode) {
 			current_rf_mode = stats->rf_Mode;
 			packet_timeout_us = (uint32_t) 1000000.0 / CRSF_rfmdToLinkRateHz(current_rf_mode) * 1.2; // add 20% timeout margin

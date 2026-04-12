@@ -101,9 +101,11 @@ bool processFrame() {
 				if (channel_data_callback != nullptr) 
 					channel_data_callback(&crsf_channels_data);
 			}
-			else {
-				Serial.printf("len: %d : %02X %02X %02X\n", length, crsf_frame_buffer[0], crsf_frame_buffer[1], crsf_frame_buffer[2]);
-			}
+			#if !defined(SERIAL_OUTPUT_ENABLED)
+				else {
+					Serial.printf("len: %d : %02X %02X %02X\n", length, crsf_frame_buffer[0], crsf_frame_buffer[1], crsf_frame_buffer[2]);
+				}
+			#endif
 		}
 		return true;
 	}
@@ -126,24 +128,23 @@ IRAM_ATTR void CRSF_RX_loop() {
 		int expected_frame_len = crsf_frame_buffer[CRSF_FRAME_LENGTH_ADDRESS];
 		int full_frame_length = expected_frame_len + 2;
 		if (full_frame_length > CRSF_FRAME_SIZE_MAX) {
-			Serial.printf("Frame error: size if too large = %d\n", full_frame_length);
+			#if !defined(SERIAL_OUTPUT_ENABLED)
+				Serial.printf("Frame error: size if too large = %d\n", full_frame_length);
+			#endif
 			gotFrameError();
 		}
 		else if (crsf_frame_buffer_pos >= full_frame_length) {
 			if (processFrame()) {
+				#if defined(SERIAL_OUTPUT_ENABLED)
+					Serial.write(crsf_frame_buffer, full_frame_length);
+				#endif
 				crsf_frame_buffer_pos -= full_frame_length; // subtract frame size from write pointer
 				memcpy(crsf_frame_buffer, &crsf_frame_buffer[full_frame_length], crsf_frame_buffer_pos); // put the remaining bytes into beginning
-
-					// Output the received frame to serial if enabled
-					#if defined(SERIAL_OUTPUT_ENABLED)
-						for (int i = 0; i < full_frame_length; i++) {
-							Serial.printf("%02X ", crsf_frame_buffer[i]);
-						}
-						Serial.println();
-					#endif
 			}
 			else {
-				Serial.printf("Frame error: wrong CRC\n");
+				#if !defined(SERIAL_OUTPUT_ENABLED)
+					Serial.printf("Frame error: wrong CRC\n");
+				#endif
 				gotFrameError();
 			}
 		}
