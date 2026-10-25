@@ -1,4 +1,5 @@
 #include "crsf_rx.h"
+#include "crsf_crc.h"
 
 #include <Arduino.h>
 
@@ -22,30 +23,9 @@ static const int rfmd_to_link_rate_tbs [] = {4, 50, 150};
 static const int rfmd_dbm_sensitivity [] = {125, 123, 120, 117, 112, 112, 108, 105}; // expresslrs
 static const int * rfmd_to_link_rate;
 static int rfmd_to_link_rate_len = 0;
-static uint8_t crc8_lut [256];
 
 static uint8_t crsf_frame_buffer [CRSF_FRAME_SIZE_MAX*2];
 static int crsf_frame_buffer_pos = 0;
-
-
-static void CRC8_createLut(uint8_t poly)
-{
-	for (int i=0; i < 256; i++) {
-		uint8_t crc = i;
-		for (int j=0; j < 8; j++) {
-			crc = (crc << 1) ^ ((crc & 0x80) ? poly : 0);
-		}
-		crc8_lut[i] = crc;
-	}
-}
-
-static uint8_t CRC8_calculate(uint8_t * data, int len) {
-	uint8_t crc = 0;
-	for (int i=0; i < len; i++) {
-		crc = crc8_lut[crc ^ *data++];
-	}
-	return crc;
-}
 
 static crsf_payload_link_statistics_t crsf_link_stats;
 static crsf_channels_t crsf_channels_data;
