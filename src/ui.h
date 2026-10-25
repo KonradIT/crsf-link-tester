@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "flight_path.h"
 
 
 void UI_setup();
@@ -9,8 +10,9 @@ void UI_setTxPwr(int value);
 void UI_setLinkRate(int value);
 void UI_setRssiScale(int dbm_min, int dbm_max);
 void UI_setChannels(uint32_t * channel_data_8);
-void UI_nextChannelPage();
+void UI_nextPage();
 void UI_pushDataFrameIndication(uint8_t * results, int count);
+void UI_setTelemetry(const flight_sample_t & sample, uint32_t sent_frames);
 
 typedef enum {
 	CRSF_RESULT_PACKET_OK = 0,

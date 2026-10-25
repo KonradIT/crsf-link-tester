@@ -1,14 +1,10 @@
 #include <Arduino.h>
 
-#ifdef BOARD_M5CORE2
-	#include <M5Core2.h> 
-#endif
-
-#ifdef BOARD_M5STICKS3
+#if defined(BOARD_M5CORE2) || defined(BOARD_M5STICKS3)
 	#include <M5Unified.h>
 #endif
 
-#ifdef BOARD_TTGO_T_DISPLAY
+#ifdef PAGE_BUTTON_PIN
 	#include <Button2.h>
 #endif
 
@@ -16,6 +12,7 @@
 // #include "mqtt_client.h"
 
 #include "crsf_rx.h"
+#include "telemetry.h"
 #include "ui.h"
 
 static crsf_payload_link_statistics_t * link_stat_ptr = nullptr;
@@ -29,9 +26,8 @@ static StaticQueue_t data_packet_results_queue;
 static QueueHandle_t data_packet_results_queue_handle;
 static uint8_t data_packet_results_queue_storage [20 * 1];
 
-#ifdef BOARD_TTGO_T_DISPLAY
-static Button2 ttgo_page_button(35);
-static bool ttgo_page_button_prev_pressed = false;
+#ifdef PAGE_BUTTON_PIN
+static Button2 page_button(PAGE_BUTTON_PIN);
 #endif
 
 void reportPacketResult(uint8_t result) {
@@ -39,9 +35,7 @@ void reportPacketResult(uint8_t result) {
 }
 
 void setup() {
-	#if defined(BOARD_M5CORE2) 
-		M5.begin(true, false, false);
-	#elif defined(BOARD_M5STICKS3)
+	#if defined(BOARD_M5CORE2) || defined(BOARD_M5STICKS3)
 		auto cfg = M5.config();
 		M5.begin(cfg);
 		M5.Power.setExtOutput(true); // EXT_5V OUTPUT ON
@@ -53,6 +47,7 @@ void setup() {
 	#else
 		CRSF_RX_begin(CRSF_RX_VARIANT_ELRS);
 	#endif 
+	CRSF_TELEMETRY_begin();
 	CRSF_RX_onReceiveLinkStatistics([](crsf_payload_link_statistics_t * stats) {
 		link_stat_ptr = stats;
 		#if !defined(SERIAL_OUTPUT_ENABLED)
@@ -82,20 +77,29 @@ void setup() {
 	disableCore0WDT();
 	xTaskCreatePinnedToCore([](void * parameters) {
 		uint8_t packet_results [20];
+		uint32_t last_telemetry_ui_ms = 0;
+		#if defined(PAGE_BUTTON_PIN)
+			// isPressed() is the raw pin level, edge detection on it counts contact bounce as extra presses
+			page_button.setPressedHandler([](Button2 &) {
+				UI_nextPage();
+			});
+		#endif
 		for(;;) {
-			#if defined(BOARD_M5STICKS3)
+			#if defined(BOARD_M5STICKS3) || defined(BOARD_M5CORE2)
 				M5.update();
 				if (M5.BtnA.wasPressed()) {
-					UI_nextChannelPage();
+					UI_nextPage();
 				}
-			#elif defined(BOARD_TTGO_T_DISPLAY)
-				ttgo_page_button.loop();
-				bool ttgo_page_button_now_pressed = ttgo_page_button.isPressed();
-				if (ttgo_page_button_now_pressed && !ttgo_page_button_prev_pressed) {
-					UI_nextChannelPage();
-				}
-				ttgo_page_button_prev_pressed = ttgo_page_button_now_pressed;
+			#elif defined(PAGE_BUTTON_PIN)
+				page_button.loop(); // runs the debounced pressed handler
 			#endif
+			if (millis() - last_telemetry_ui_ms >= 250) {
+				last_telemetry_ui_ms = millis();
+				flight_sample_t telemetry_sample;
+				uint32_t telemetry_sent_frames;
+				CRSF_TELEMETRY_getStatus(&telemetry_sample, &telemetry_sent_frames);
+				UI_setTelemetry(telemetry_sample, telemetry_sent_frames);
+			}
 			int queued_packet_results = uxQueueMessagesWaiting(data_packet_results_queue_handle);
 			if (link_stat_ptr != nullptr) { 
 				crsf_payload_link_statistics_t * sig = link_stat_ptr;
@@ -126,6 +130,7 @@ void setup() {
 	xTaskCreatePinnedToCore([](void * parameters) {
 		for (;;) {
 			CRSF_RX_loop();
+			CRSF_TELEMETRY_loop();
 			if (packet_timeout_us > 0) {
 				uint32_t t = micros();
 				if (t - last_packet_time_us > packet_timeout_us) {

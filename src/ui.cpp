@@ -1,15 +1,16 @@
 
 #include "ui.h"
-#ifdef BOARD_M5CORE2
-	#include <M5Core2.h>
-	#define lcd M5.Lcd
-#elif BOARD_M5STICKS3
+#if defined(BOARD_M5CORE2) || defined(BOARD_M5STICKS3)
 	#include <M5Unified.h>
 	#define lcd M5.Display
 #else
 	#include <TFT_eSPI.h>
 	static TFT_eSPI _lcd = TFT_eSPI();
 	#define lcd _lcd
+#endif
+
+#ifndef DISPLAY_ROTATION
+	#define DISPLAY_ROTATION 1 // landscape, 3 = landscape flipped 180 degrees
 #endif
 
 // for boards using 135x240 screen (ST7789 driver).
@@ -30,6 +31,7 @@ static UISprite lq_bar(&lcd);
 static UISprite tx_pwr_text(&lcd);
 static UISprite link_rate_text(&lcd);
 static UISprite rx_frame_indicator_bar(&lcd);
+static UISprite telemetry_line(&lcd); // reused for every line of the telemetry page
 
 static UISprite ch1_text(&lcd);
 static UISprite ch2_text(&lcd);
@@ -104,6 +106,18 @@ static const int STICKS3_STATS_FRAME_X = 4;
 static const int STICKS3_STATS_FRAME_Y = 72;
 static const int STICKS3_STATS_FRAME_W = 232;
 static const int STICKS3_STATS_FRAME_H = 60;
+// telemetry page uses the whole screen, RSSI and LQ are hidden
+static const int TELEMETRY_X = 0;
+static const int TELEMETRY_Y = 0;
+static const int TELEMETRY_W = 240;
+static const int TELEMETRY_LINE_PITCH = 17;
+#else
+static const int MAIN_CONTENT_Y = 65; // below RSSI and LQ, replaced by the telemetry page
+static const int TELEMETRY_X = 10;
+static const int TELEMETRY_Y = 72;
+static const int TELEMETRY_W = 300;
+static const int TELEMETRY_LINE_PITCH = 20;
+static bool telemetry_page_active = false;
 #endif
 
 
@@ -136,20 +150,39 @@ static uint8_t sticks3ChannelPages() {
 	return (pages == 0) ? 1 : pages;
 }
 
+static bool sticks3IsChannelPage() {
+	return sticks3_page_index < sticks3ChannelPages();
+}
+
 static bool sticks3IsStatsPage() {
-	return sticks3_page_index >= sticks3ChannelPages();
+	return sticks3_page_index == sticks3ChannelPages();
+}
+
+static bool isTelemetryPage() {
+	return sticks3_page_index == sticks3ChannelPages() + 1;
 }
 
 static void sticks3ClearContentArea() {
 	lcd.fillRect(STICKS3_GRID_X, STICKS3_GRID_Y, lcd.width() - STICKS3_GRID_X * 2, lcd.height() - STICKS3_GRID_Y, TFT_BLACK);
 }
+#else
+static bool isTelemetryPage() {
+	return telemetry_page_active;
+}
 #endif
+
+static void pushTelemetryLine(int line, uint16_t color, const char * text) {
+	clearSprite(telemetry_line);
+	telemetry_line.setTextColor(color);
+	telemetry_line.print(text);
+	telemetry_line.pushSprite(TELEMETRY_X, TELEMETRY_Y + line * TELEMETRY_LINE_PITCH);
+}
 
 void UI_setup() {
 	#if defined(TFT_MISO) && defined(TFT_MOSI) && defined(TFT_SCLK) && defined(TFT_CS) && defined(TFT_DC) && defined(TFT_RST)
 		// custom initialization code for non m5 board
 		lcd.init();
-		lcd.setRotation(1); // use landscape layout
+		lcd.setRotation(DISPLAY_ROTATION); // use landscape layout
 		lcd.fillScreen(TFT_BLACK);
 		#ifdef TFT_BACKLIGHT
 			// turn on the backlight if any
@@ -162,7 +195,7 @@ void UI_setup() {
 		lcd.invertDisplay(1);
 	#endif
 	#if defined(SMALL_SCREEN_BOARD)
-		lcd.setRotation(1); // 240x135 (landscape) on StickS3
+		lcd.setRotation(DISPLAY_ROTATION); // 240x135 (landscape) on StickS3
 		lcd.fillScreen(TFT_BLACK);
 		createElement(rssi_text, 2, 112, 16, TFT_CYAN);
 		createElement(rssi_bar, 2, 112, 14, TFT_CYAN);
@@ -195,6 +228,7 @@ void UI_setup() {
 		rx_frame_indicator_bar.setTextColor(TFT_BLACK);
 		rx_frame_indicator_bar.pushSprite(110, 70);
 	#endif
+	createElement(telemetry_line, 2, TELEMETRY_W, 16, TFT_WHITE);
 	UI_setRssi(0);
 	UI_setLq(0);
 	UI_setTxPwr(0);
@@ -202,6 +236,12 @@ void UI_setup() {
 }
 
 void UI_setLq(int percent) {
+	#if defined(SMALL_SCREEN_BOARD)
+		if (isTelemetryPage()) {
+			current_lq = percent;
+			return;
+		}
+	#endif
 	if (percent != current_lq) {
 		current_lq = percent;
 		clearSprite(lq_text);
@@ -221,6 +261,12 @@ void UI_setLq(int percent) {
 }
 
 void UI_setRssi(int dbm) {
+	#if defined(SMALL_SCREEN_BOARD)
+		if (isTelemetryPage()) {
+			current_rssi = dbm;
+			return;
+		}
+	#endif
 	if (dbm != current_rssi) {
 		current_rssi = dbm;
 		clearSprite(rssi_text);
@@ -255,6 +301,10 @@ void UI_setTxPwr(int value) {
 		tx_pwr_text.pushSprite(STICKS3_STATS_TX_X, STICKS3_STATS_TX_Y);
 	}
 #else
+	if (isTelemetryPage()) {
+		current_pw = value;
+		return;
+	}
 	if (value != current_pw) {
 		current_pw = value;
 		clearSprite(tx_pwr_text);
@@ -277,6 +327,10 @@ void UI_setLinkRate(int hz) {
 		link_rate_text.pushSprite(STICKS3_STATS_RATE_X, STICKS3_STATS_RATE_Y);
 	}
 #else
+	current_link_rate = hz;
+	if (isTelemetryPage()) {
+		return;
+	}
 	clearSprite(link_rate_text);
 	link_rate_text.printf("PR %d", hz);
 	link_rate_text.pushSprite(10, 100);
@@ -290,7 +344,7 @@ void UI_setRssiScale(int dbm_min, int dbm_max) {
 
 void UI_setChannels(uint32_t * channel_data) {
 	#if defined(SMALL_SCREEN_BOARD)
-		if (sticks3IsStatsPage()) {
+		if (!sticks3IsChannelPage()) {
 			for (uint8_t i=0; i < UI_CHANNEL_COUNT; i++) {
 				current_rc_channels_data[i] = channel_data[i];
 			}
@@ -344,6 +398,9 @@ void UI_setChannels(uint32_t * channel_data) {
 			// update graphics only if the current channel value is different from previous
 			if (value != current_rc_channels_data[i]) {
 				current_rc_channels_data[i] = value;
+				if (isTelemetryPage()) {
+					continue;
+				}
 				UISprite& text = *channel_texts[i];
 				UISprite& bar = *channel_bars[i];
 				int v_offset = 140 + 10 * i;
@@ -358,13 +415,29 @@ void UI_setChannels(uint32_t * channel_data) {
 	#endif
 }
 
-void UI_nextChannelPage() {
+void UI_nextPage() {
 #if defined(SMALL_SCREEN_BOARD)
-	uint8_t total_pages = sticks3ChannelPages() + 1; // +1 stats page
+	bool was_telemetry_page = isTelemetryPage();
+	uint8_t total_pages = sticks3ChannelPages() + 2; // +1 stats page, +1 telemetry page
 	sticks3_page_index = (sticks3_page_index + 1) % total_pages;
 	sticks3_force_channel_redraw = true;
 	sticks3_force_stats_redraw = true;
-	sticks3ClearContentArea();
+	if (isTelemetryPage()) {
+		lcd.fillScreen(TFT_BLACK); // drawn by the next UI_setTelemetry call
+		return;
+	}
+	if (was_telemetry_page) {
+		lcd.fillScreen(TFT_BLACK);
+		int rssi = current_rssi;
+		int lq = current_lq;
+		current_rssi = -1; // force redraw of the hidden RSSI and LQ
+		current_lq = -1;
+		UI_setRssi(rssi);
+		UI_setLq(lq);
+	}
+	else {
+		sticks3ClearContentArea();
+	}
 	if (sticks3IsStatsPage()) {
 		UI_setTxPwr(current_pw);
 		UI_setLinkRate(current_link_rate);
@@ -375,6 +448,22 @@ void UI_nextChannelPage() {
 		uint32_t channel_data [UI_CHANNEL_COUNT];
 		for (uint8_t i=0; i < UI_CHANNEL_COUNT; i++) {
 			channel_data[i] = current_rc_channels_data[i];
+		}
+		UI_setChannels(channel_data);
+	}
+#else
+	telemetry_page_active = !telemetry_page_active;
+	lcd.fillRect(0, MAIN_CONTENT_Y, lcd.width(), lcd.height() - MAIN_CONTENT_Y, TFT_BLACK);
+	if (!telemetry_page_active) {
+		int pw = current_pw;
+		current_pw = -1; // force redraw
+		UI_setTxPwr(pw);
+		UI_setLinkRate(current_link_rate);
+		rx_frame_indicator_bar.pushSprite(110, 70);
+		uint32_t channel_data [UI_CHANNEL_COUNT];
+		for (uint8_t i=0; i < UI_CHANNEL_COUNT; i++) {
+			channel_data[i] = current_rc_channels_data[i];
+			current_rc_channels_data[i] = -1; // force redraw
 		}
 		UI_setChannels(channel_data);
 	}
@@ -434,8 +523,33 @@ void UI_pushDataFrameIndication(uint8_t * results, int count) {
 		}
 	}
 	rx_frame_indicator_bar.drawRect(0, 0, rx_frame_indicator_bar.width(), rx_frame_indicator_bar.height(), TFT_DARKCYAN);
-	rx_frame_indicator_bar.pushSprite(110, 70);
+	if (!isTelemetryPage()) {
+		rx_frame_indicator_bar.pushSprite(110, 70);
+	}
 	packet_counter += count;
 #endif
+}
+
+// Same info as the fakelrsdrone status screen
+void UI_setTelemetry(const flight_sample_t & s, uint32_t sent_frames) {
+	if (!isTelemetryPage()) {
+		return;
+	}
+	char line[48];
+	snprintf(line, sizeof(line), "%s %s #%lu", s.flight_mode, s.phase, (unsigned long) s.mission_number);
+	pushTelemetryLine(0, TFT_CYAN, line);
+	snprintf(line, sizeof(line), "%.1fV %.1fA %u%%", s.voltage_v, s.current_a, s.remaining_percent);
+	pushTelemetryLine(1, TFT_WHITE, line);
+	snprintf(line, sizeof(line), "%.0fmAh SAT %u", s.used_mah, s.satellites);
+	pushTelemetryLine(2, TFT_WHITE, line);
+	snprintf(line, sizeof(line), "ALT %+.0fm %.0fkm/h", s.baro_altitude_m, s.ground_speed_mps * 3.6);
+	pushTelemetryLine(3, TFT_WHITE, line);
+	snprintf(line, sizeof(line), "V/S %+.1fm/s", s.vertical_speed_mps);
+	pushTelemetryLine(4, TFT_WHITE, line);
+	snprintf(line, sizeof(line), "%.6f,%.6f", s.latitude_deg, s.longitude_deg);
+	pushTelemetryLine(5, TFT_WHITE, line);
+	pushTelemetryLine(6, TFT_YELLOW, s.waypoint);
+	snprintf(line, sizeof(line), "t=%.0fs TX %lu", s.mission_seconds, (unsigned long) sent_frames);
+	pushTelemetryLine(7, TFT_LIGHTGREY, line);
 }
 
